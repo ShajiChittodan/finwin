@@ -211,7 +211,8 @@ class Component extends DCLogic {
       fType:'all', fCur:'all', fFire:'all', sort:'value', collapsed:{},
       hid:'h2', lid:'l1', uvVal:'', uvDate:TODAY_ISO, uvTried:false,
       canOpen:false, whichOpen:false, fireView:'chart',
-      baseErr:'', restoreMode:'replace', pending:null, delTarget:null, eraseVal:'', toast:null
+      baseErr:'', restoreMode:'replace', pending:null, delTarget:null, eraseVal:'', toast:null,
+      shot:'idle', shotRows:[], shotMsg:'', shotProg:'', shotTried:false
     }, start);
     this.state.data = this.withSnapshot(this.state.data, this.state.base);
   }
@@ -219,6 +220,12 @@ class Component extends DCLogic {
     try{ this.mq = window.matchMedia('(prefers-color-scheme: dark)'); this.setState({sysDark:this.mq.matches}); this.mql=(e)=>this.setState({sysDark:e.matches}); this.mq.addEventListener('change',this.mql);}catch(e){}
     var self=this;
     document.addEventListener('keydown',function(e){ if(e.key==='Escape'&&self.state.sheet) self.setState({sheet:null,picker:false}); });
+    // Screenshot tab: paste (Ctrl/⌘+V) or drop an image anywhere on the page
+    document.addEventListener('paste',function(e){ if(!self.shotActive()) return; var items=(e.clipboardData&&e.clipboardData.items)||[];
+      for(var i=0;i<items.length;i++){ if(items[i].kind==='file'&&/^image\//.test(items[i].type)){ e.preventDefault(); self.readImage(items[i].getAsFile()); return; } }
+      self.flash('No image on the clipboard — copy a screenshot first, or choose a file.'); });
+    document.addEventListener('dragover',function(e){ if(self.shotActive()) e.preventDefault(); });
+    document.addEventListener('drop',function(e){ if(!self.shotActive()) return; e.preventDefault(); var f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) self.readImage(f); });
     try{ if(navigator.storage&&navigator.storage.persisted) navigator.storage.persisted().then(function(p){ if(p!==self.state.persisted) self.setState({persisted:p}); }); }catch(e){}
     this.save();
   }
@@ -326,6 +333,75 @@ class Component extends DCLogic {
     this.setState({sheet:null,delTarget:null,screen:t.kind==='asset'?'holdings':'liabilities'});
     this.flash('Deleted — '+t.name);
   }
+  /* ---------- Paste a screenshot: on-device text recognition ---------- */
+  shotActive(){ var s=this.state; return s.sheet==='form'&&s.qaTab==='shot'&&!s.picker&&s.form.mode!=='edit'&&s.shot!=='reading'; }
+  // Loads the reader (Tesseract.js, hosted with the app) the first time it is needed. Nothing is sent anywhere.
+  loadOcr(){
+    if(this.ocr) return this.ocr;
+    var self=this, base=new URL('vendor/ocr/',location.href).href;
+    this.ocr=new Promise(function(res,rej){
+      if(window.Tesseract) return res();
+      var sc=document.createElement('script'); sc.src=base+'tesseract.min.js';
+      sc.onload=function(){res();}; sc.onerror=function(){rej(new Error('The screenshot reader couldn’t be downloaded. Check your connection and try again.'));};
+      document.head.appendChild(sc);
+    }).then(function(){
+      return window.Tesseract.createWorker('eng',1,{workerPath:base+'worker.min.js',corePath:base,langPath:base,gzip:true,workerBlobURL:false,
+        logger:function(m){ self.ocrProgress(m); }});
+    });
+    this.ocr.catch(function(){ self.ocr=null; });
+    return this.ocr;
+  }
+  ocrProgress(m){
+    if(this.state.shot!=='reading'||!m||typeof m.progress!=='number') return;
+    var label={'loading tesseract core':'Loading the reader','initializing tesseract':'Starting the reader','loading language traineddata':'Loading English text data','initializing api':'Starting the reader','recognizing text':'Reading your screenshot'}[m.status]||'Working';
+    var txt=label+'… '+Math.round(m.progress*100)+'%';
+    if(txt!==this.state.shotProg) this.setState({shotProg:txt});
+  }
+  pickImage(){
+    var self=this, inp=document.createElement('input');
+    inp.type='file'; inp.accept='image/*'; inp.style.display='none';
+    inp.addEventListener('change',function(){ var f=inp.files&&inp.files[0]; inp.remove(); if(f) self.readImage(f); });
+    document.body.appendChild(inp); inp.click();
+  }
+  readImage(file){
+    var self=this;
+    if(!file||!/^image\//.test(file.type||'')){ this.setState({shot:'error',shotMsg:'That file isn’t an image. Use a PNG or JPG screenshot.'}); return; }
+    if(file.size>20e6){ this.setState({shot:'error',shotMsg:'That image is over 20 MB. Crop it to the part with your balances and try again.'}); return; }
+    this.setState({shot:'reading',shotRows:[],shotMsg:'',shotTried:false,shotProg:'Loading the reader…'});
+    this.loadOcr().then(function(w){ return w.recognize(file); }).then(function(res){
+      var s=self.state; if(s.sheet!=='form'||s.qaTab!=='shot') return;
+      var lines=((res&&res.data&&res.data.lines)||[]).map(function(l){return {text:l.text,confidence:l.confidence};});
+      var known=self.knownCurs();
+      var rows=FinWinParse.parseStatement(lines,{base:s.base,holdings:s.data.holdings}).map(function(r){
+        var h=r.match!=='new'?s.data.holdings.filter(function(x){return x.id===r.match;})[0]:null;
+        var cur=known.indexOf(r.cur)>=0?r.cur:s.base; // the amount keeps the currency it was read in; it's converted on save if needed
+        return {raw:r.raw,name:r.name,amount:String(r.amount),type:h?h.type:r.type,cur:cur,match:r.match,include:r.include,isTotal:r.isTotal,conf:r.conf,
+          note:known.indexOf(r.cur)<0?('Looks like '+r.cur+', which has no FX rate yet, so '+s.base+' is selected. Add the rate in Settings, or change the currency here.'):''};
+      });
+      if(!rows.length) self.setState({shot:'error',shotMsg:'No balances found in this image. Try a sharper screenshot that shows names and amounts, or type it in.'});
+      else self.setState({shot:'review',shotRows:rows});
+    }).catch(function(e){ self.setState({shot:'error',shotMsg:(e&&e.message)||'The screenshot couldn’t be read.'}); });
+  }
+  knownCurs(){ var s=this.state, out=[s.base]; ['USD'].concat(Object.keys(s.data.rates)).forEach(function(k){if(out.indexOf(k)<0) out.push(k);}); return out; }
+  shotRowErrors(r){ var e={}, v=n0(r.amount); if(!r.name.trim()) e.name=true; if(v===null||v<=0) e.amount=true; return e; }
+  shotConfirm(){
+    var self=this, s=this.state, rows=s.shotRows.filter(function(r){return r.include;});
+    if(!rows.length){ this.flash('Tick at least one row to save.'); return; }
+    if(rows.some(function(r){return Object.keys(self.shotRowErrors(r)).length;})){ this.setState({shotTried:true}); return; }
+    var ids={}; s.data.holdings.forEach(function(h){ids[h.id]=1;});
+    var updated=rows.filter(function(r){return r.match!=='new'&&ids[r.match];}).length, added=rows.length-updated;
+    this.setData(function(d){
+      var rate=function(c){return c==='USD'?1:(d.rates[c]?d.rates[c].rate:1);};
+      rows.forEach(function(r,i){
+        var v=n0(r.amount), h=r.match!=='new'?d.holdings.filter(function(x){return x.id===r.match;})[0]:null;
+        if(h){ var nv=r.cur===h.cur?v:round2(v/rate(r.cur)*rate(h.cur)); h.current=nv; h.date=TODAY_ISO; h.history=h.history.concat([{d:TODAY_ISO,v:nv}]); }
+        else { var t=typeOf(r.type); d.holdings.push({id:'s'+Date.now()+'-'+i,name:r.name.trim(),type:t.k,sub:t.subs[0],cur:r.cur,invested:v,current:v,date:TODAY_ISO,
+          fire:!(t.k==='re'&&t.subs[0]==='Home I live in'),tag:'',notes:'Added from a screenshot',history:[{d:TODAY_ISO,v:v}]}); }
+      });
+    });
+    this.setState({sheet:null,shot:'idle',shotRows:[],shotTried:false});
+    this.flash(rows.length+' row'+(rows.length===1?'':'s')+' saved from screenshot'+(added&&updated?' ('+added+' new, '+updated+' updated)':''));
+  }
   componentWillUnmount(){ try{this.mq.removeEventListener('change',this.mql);}catch(e){} clearTimeout(this.tt); clearTimeout(this.ot); }
   flash(text){ clearTimeout(this.tt); this.setState({toast:text}); this.tt=setTimeout(()=>this.setState({toast:null}),3200); }
   go(screen){ var p={screen:screen,sheet:null}; if(screen==='assumptions') p.prevScreen=this.state.screen==='assumptions'?this.state.prevScreen:this.state.screen; this.setState(p); }
@@ -402,7 +478,7 @@ class Component extends DCLogic {
     return {title:p.t,plain:p.plain,sub:p.sub,inputs:p.inputs,hasNote:!!p.note,note:p.note||'',editLabel:p.edit[0],edit:p.edit[1]};
   }
   openCalc(key){ this.setState({sheet:'calc',calcKey:key}); }
-  openQA(tab){ this.setState({sheet:'form',form:blankForm('asset',this.state.base),qaTab:tab||'type',picker:false,search:'',shot:'idle'}); }
+  openQA(tab){ this.setState({sheet:'form',form:blankForm('asset',this.state.base),qaTab:tab||'type',picker:false,search:'',shot:'idle',shotRows:[],shotTried:false,shotMsg:''}); }
   openEditH(id){ var h=this.state.data.holdings.filter(function(x){return x.id===id;})[0]; if(!h) return;
     this.setState({sheet:'form',picker:false,qaTab:'type',form:Object.assign(blankForm('asset',this.state.base),{mode:'edit',id:id,name:h.name,type:h.type,sub:h.sub,cur:h.cur,invested:String(h.invested),current:String(h.current),date:h.date,fire:h.fire,notes:h.notes||''})}); }
   openEditL(id){ var l=this.state.data.liabilities.filter(function(x){return x.id===id;})[0]; if(!l) return;
@@ -642,9 +718,9 @@ class Component extends DCLogic {
     var match=function(x){return !q||x[0].toLowerCase().indexOf(q)>=0||x[1].toLowerCase().indexOf(q)>=0;};
     var allList=(q?CURALL:ALLCUR).filter(match).map(mk);
     var live=null; if(fi!==null&&fc!==null&&fi>=0&&fc>=0){var gg=fc-fi, gp=fi>0?gg/fi*100:0, g3=this.gi(gg); live={cls:g3.cls,arrow:g3.arrow,txt:this.smoney(gg,F.cur)+(fi>0?' ('+this.pct(gp,1,true)+')':'')};}
-    var qa={showTabs:false,isType:s.qaTab==='type',isShot:s.qaTab==='shot',tabTypeCls:s.qaTab==='type'?'on':'',tabShotCls:s.qaTab==='shot'?'on':'',
-      tabType:function(){self.setState({qaTab:'type',shot:'idle'});},tabShot:function(){self.setState({qaTab:'shot'});},
-      showForm:!s.picker,showPicker:s.picker,showShot:false,
+    var qa={showTabs:F.mode!=='edit'&&!s.picker,isType:s.qaTab==='type',isShot:s.qaTab==='shot',tabTypeCls:s.qaTab==='type'?'on':'',tabShotCls:s.qaTab==='shot'?'on':'',
+      tabType:function(){self.setState({qaTab:'type'});},tabShot:function(){self.setState({qaTab:'shot'});},
+      showForm:!s.picker&&(s.qaTab==='type'||F.mode==='edit'),showPicker:s.picker,showShot:!s.picker&&s.qaTab==='shot'&&F.mode!=='edit',
       showKind:F.mode!=='edit',isAsset:isAsset,isLiab:!isAsset,assetCls:isAsset?'on':'',liabCls:isAsset?'':'on',setAsset:function(){self.setForm({kind:'asset',tried:false});},setLiab:function(){self.setForm({kind:'liability',tried:false});},
       f:F,e:E,full:full,compact:!full,types:TYPES,subs:t.subs,ltypes:LTYPES,base:b,
       setType:function(e){var nt=typeOf(e.target.value);self.setForm({type:nt.k,sub:nt.subs[0],fire:!(nt.k==='re'&&nt.subs[0]==='Home I live in')});},
@@ -660,6 +736,28 @@ class Component extends DCLogic {
       openPicker:function(){self.setState({picker:true,search:''});},closePicker:function(){self.setState({picker:false});},search:s.search,setSearch:function(e){self.setState({search:e.target.value});},
       showPopular:!q,popular:POPULAR.map(mk),allCur:allList,noMatch:q&&allList.length===0};
 
+    // screenshot review rows
+    var known=this.knownCurs();
+    var upRow=function(i,p){self.setState(function(st){var rows=st.shotRows.slice();rows[i]=Object.assign({},rows[i],p);return {shotRows:rows};});};
+    var nIncl=s.shotRows.filter(function(r){return r.include;}).length;
+    var shot={idle:s.shot==='idle',reading:s.shot==='reading',error:s.shot==='error',review:s.shot==='review',msg:s.shotMsg,progress:s.shotProg,
+      firstTime:!this.ocr,count:s.shotRows.length,curOpts:known,types:TYPES,
+      matchOpts:d.holdings.map(function(h){return {v:h.id,l:h.name};}),
+      choose:function(){self.pickImage();},reset:function(){self.setState({shot:'idle',shotRows:[],shotTried:false});},
+      confirm:function(){self.shotConfirm();},confirmLabel:'Save '+nIncl+' row'+(nIncl===1?'':'s'),noneIncl:nIncl===0,
+      rows:s.shotRows.map(function(r,i){var E2=s.shotTried&&r.include?self.shotRowErrors(r):{};
+        return {raw:r.raw,name:r.name,amount:r.amount,type:r.type,cur:r.cur,match:r.match,include:r.include,conf:r.conf,confCls:r.conf==='High'?'tag cy':'tag amber',
+          note:r.note,hasNote:!!r.note,
+          convNote:(function(){var h=r.match!=='new'?d.holdings.filter(function(x){return x.id===r.match;})[0]:null; var v=n0(r.amount);
+            if(!h||h.cur===r.cur||v===null) return ''; var cr=function(k){return k==='USD'?1:(d.rates[k]?d.rates[k].rate:1);};
+            return '“'+h.name+'” is kept in '+h.cur+': '+self.money(v,r.cur,2)+' will be saved as '+self.money(v/cr(r.cur)*cr(h.cur),h.cur,2)+' at your FX rate.';})(),isTotal:r.isTotal,cardCls:'card shotrow'+(r.include?'':' off'),
+          idN:'sr-n'+i,idA:'sr-a'+i,idT:'sr-t'+i,idC:'sr-c'+i,idM:'sr-m'+i,
+          nameCls:'input'+(E2.name?' bad':''),amtCls:'input'+(E2.amount?' bad':''),nameErr:!!E2.name,amtErr:!!E2.amount,
+          setName:function(e){upRow(i,{name:e.target.value});},setAmount:function(e){upRow(i,{amount:e.target.value});},
+          setType:function(e){upRow(i,{type:e.target.value});},setCur:function(e){upRow(i,{cur:e.target.value});},
+          setMatch:function(e){var v=e.target.value,h=d.holdings.filter(function(x){return x.id===v;})[0];upRow(i,h?{match:v,type:h.type}:{match:v});},
+          toggle:function(){upRow(i,{include:!r.include});}};})};
+
     var rs={isReplace:s.restoreMode==='replace',isMerge:s.restoreMode==='merge',replaceCls:s.restoreMode==='replace'?'on':'',mergeCls:s.restoreMode==='merge'?'on':'',
       setReplace:function(){self.setState({restoreMode:'replace'});},setMerge:function(){self.setState({restoreMode:'merge'});},
       note:s.restoreMode==='replace'?'Everything on this device is replaced with the backup.':'Backup entries are added; holdings with the same ID are updated from the backup.',
@@ -673,7 +771,7 @@ class Component extends DCLogic {
     var er={val:s.eraseVal,set:function(e){self.setState({eraseVal:e.target.value});},disabled:s.eraseVal!=='DELETE',summary:d.holdings.length+' holdings, '+d.liabilities.length+' liabilities, '+Object.keys(d.rates).length+' FX rates and your settings',
       confirm:function(){if(s.eraseVal!=='DELETE')return;self.setState(Object.assign(defaultSettings(),{sheet:null,data:emptyData(),screen:'dashboard',eraseVal:'',persisted:s.persisted,form:blankForm('asset',DEFAULT_BASE)}));self.flash('All data erased from this device');}};
 
-    return {appClass:'app '+theme,ic:IC,nav:nav,hdr:hdr,is:is,showEmpty:showEmpty,empty:empty,doBackup:doBackup,dash:dash,hold:hold,hd:hd,liab:liab,ld:ld,fire:fire,asm:asm,set:set,sheet:sheet,calc:calc,qa:qa,rs:rs,er:er,del:del,
+    return {appClass:'app '+theme,ic:IC,nav:nav,hdr:hdr,is:is,showEmpty:showEmpty,empty:empty,doBackup:doBackup,dash:dash,hold:hold,hd:hd,liab:liab,ld:ld,fire:fire,asm:asm,set:set,sheet:sheet,calc:calc,qa:qa,shot:shot,rs:rs,er:er,del:del,
       toast:{show:!!s.toast,text:s.toast||''}};
   }
 

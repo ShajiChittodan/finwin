@@ -38,7 +38,7 @@ npm install
 npm test
 ```
 
-There are 40 browser tests (Playwright plus Node's built-in test runner) in `tests/`:
+There are 51 tests (Playwright plus Node's built-in test runner) in `tests/`:
 
 | File | What it checks |
 |---|---|
@@ -47,6 +47,7 @@ There are 40 browser tests (Playwright plus Node's built-in test runner) in `tes
 | `3-refresh.test.js` | Entries, edits and settings after a page reload; a second tab; erase-then-reload; unreadable saved data is kept aside, never overwritten. |
 | `4-backup-restore.test.js` | Backup file contents, restore (replace and merge), the lost-device scenario, rejection of bad or foreign files, cancel, and CSV exports. |
 | `5-offline-and-layout.test.js` | Offline reload; phone and tablet layouts with no sideways scrolling. |
+| `6-screenshot.test.js` | Statement reader unit tests, plus reading a real generated statement image in the browser: choose, paste, review, save, currency conversion, bad images, and no requests to other servers. |
 
 ## How the data is stored
 
@@ -55,7 +56,18 @@ There are 40 browser tests (Playwright plus Node's built-in test runner) in `tes
 - The backup file is versioned JSON (`app: "FinWin"`, `schema: 1`). It is validated before restore, and a preview is shown before anything changes.
 - Clearing browser data or using private browsing deletes everything. Keep backups.
 
+## Paste a screenshot (Beta)
+
+Quick add → **Paste a screenshot**: choose, paste (Ctrl/⌘+V) or drop a statement screenshot. Text is read on
+the device with [Tesseract.js](https://github.com/naptha/tesseract.js) (Apache-2.0), hosted with the app in
+`app/vendor/ocr/`. The image is never uploaded, and the reader (about 7 MB) is only downloaded the first time
+the tab is used, then cached for offline use. Every row found is shown for review (name, amount, currency,
+type, new holding or update an existing one), and nothing is saved until you confirm. Totals are left out
+by default so they aren't counted twice. An existing holding is only matched automatically on an exact name
+or at least two meaningful words in common. Amounts in another currency are converted at your FX rate.
+
+`app/statement-parser.js` turns the recognised lines into rows and is unit-tested in `tests/6-screenshot.test.js`.
+
 ## Not included yet
 
-- **Paste a screenshot (Beta)** from the design, which reads balances from an image on the device. It was left out on purpose, to add as a second step.
 - No live FX or price feeds: rates are entered by you, as in the design.

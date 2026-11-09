@@ -215,3 +215,4 @@ a{color:#B0127A}a:hover{color:#7A0B55}
 .btn.ghost.danger{color:var(--loss)}
 .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .tag.wrap{white-space:normal;border-radius:12px;padding:4px 10px;max-width:100%}
+.shotrow.off{opacity:.6}

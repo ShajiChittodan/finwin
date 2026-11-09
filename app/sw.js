@@ -1,7 +1,8 @@
 // FinWin service worker: makes the app work offline. Only the app's own files are cached;
 // your financial data lives in localStorage and is never sent anywhere.
-var CACHE = 'finwin-v1';
-var FILES = ['./', 'index.html', 'styles.css', 'engine.js', 'app.js', 'vendor/morphdom.min.js', 'manifest.webmanifest',
+// The screenshot reader (vendor/ocr) is cached the first time it's used, not up front.
+var CACHE = 'finwin-v2';
+var FILES = ['./', 'index.html', 'styles.css', 'engine.js', 'statement-parser.js', 'app.js', 'vendor/morphdom.min.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
   'fonts/inter-latin-400-normal.woff2', 'fonts/inter-latin-500-normal.woff2', 'fonts/inter-latin-600-normal.woff2', 'fonts/inter-latin-700-normal.woff2',
   'fonts/fraunces-latin-400-normal.woff2', 'fonts/fraunces-latin-500-normal.woff2', 'fonts/fraunces-latin-600-normal.woff2'];
