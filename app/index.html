@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FinWin — private finance tracker</title>
+<meta name="description" content="Track what you own and owe, privately. Everything stays in this browser.">
+<meta name="theme-color" content="#B0127A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="root"></div>
+<noscript><p style="font-family:sans-serif;padding:24px">FinWin needs JavaScript turned on.</p></noscript>
+<script type="text/x-template" id="tpl">
+<div class="{{appClass}}">
+<svg class="grain" aria-hidden="true"><filter id="fw-grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"></feTurbulence><feColorMatrix type="saturate" values="0"></feColorMatrix></filter><rect width="100%" height="100%" filter="url(#fw-grain)"></rect></svg>
+<div class="leakorb" aria-hidden="true"></div>
+<div class="shell">
+<nav class="sidebar" aria-label="Main navigation">
+<div class="brand"><div class="logo" aria-hidden="true">F</div><div><div class="serif" style="font-size: 22px; font-weight: 600; line-height: 1">FinWin</div><div class="muted" style="font-size: 12px; margin-top: 3px">Your money, on this device</div></div></div>
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="5">
+<button class="{{n.cls}}" onClick="{{n.go}}" aria-current="{{n.cur}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{n.icon}}"></path></svg><span>{{n.label}}</span></button>
+</sc-for>
+<div class="sidefoot"><div class="row" style="gap: 8px; color: var(--text); font-weight: 600; margin-bottom: 6px"><span class="dot"></span>Private · Manual · On this device</div>No sign-up, no cloud, no bank links. Nothing you enter leaves this browser.</div>
+</nav>
+<div class="col">
+<header class="topbar">
+<div class="tt">
+<h1 class="serif">{{hdr.title}}</h1>
+<div class="badge"><span class="dot" aria-hidden="true"></span>Private · Manual · On this device</div>
+</div>
+<div class="hdr-actions">
+<button class="chip" onClick="{{hdr.goSettings}}" aria-label="{{hdr.baseAria}}"><span class="flag" style="width: 22px; height: 22px; font-size: 9px" aria-hidden="true">{{hdr.baseFlag}}</span>{{hdr.base}}</button>
+<button class="{{hdr.backupCls}}" onClick="{{hdr.goSettings}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.clock}}"></path></svg>{{hdr.backupText}}</button>
+<button class="iconbtn" onClick="{{hdr.toggleTheme}}" aria-label="{{hdr.themeAria}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{hdr.themeIcon}}"></path></svg></button>
+<button class="btn primary qa-top" onClick="{{hdr.openQA}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.plus}}"></path></svg>Quick add</button>
+</div>
+</header>
+<main class="main">
+<div class="content">
+
+<!-- ================= EMPTY (first visit) ================= -->
+<sc-if value="{{showEmpty}}" hint-placeholder-val="{{ false }}">
+<div class="card accent hero">
+<div class="orb" aria-hidden="true"></div>
+<div class="empty" style="position: relative">
+<div class="halo"><svg class="ic lg" viewBox="0 0 24 24" aria-hidden="true"><path d="{{empty.icon}}"></path></svg></div>
+<h2 class="serif" style="font-size: 26px; font-weight: 500; margin: 0">{{empty.title}}</h2>
+<p class="muted" style="margin: 0; max-width: 460px">{{empty.body}}</p>
+<div class="row" style="flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 6px">
+<button class="btn primary" onClick="{{empty.add}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.plus}}"></path></svg>{{empty.addLabel}}</button>
+<button class="btn ghost" onClick="{{empty.demo}}">Load demo data</button>
+</div>
+<p class="hint" style="margin: 6px 0 0">Demo data stays in this browser too. You can erase it any time in Settings.</p>
+</div>
+</div>
+</sc-if>
+
+<!-- ================= DASHBOARD ================= -->
+<sc-if value="{{is.dashboard}}" hint-placeholder-val="{{ true }}">
+<div class="cols">
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+<section class="card accent hero" aria-labelledby="nw-h">
+<div class="orb" aria-hidden="true"></div><div class="orb2" aria-hidden="true"></div>
+<div style="position: relative">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 6px">
+<h2 id="nw-h" class="eyebrow"><span class="dot" aria-hidden="true"></span>Net worth</h2>
+<button class="info" onClick="{{dash.info.nw}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg>How is this calculated?</button>
+</div>
+<div class="bignum serif num" aria-label="{{dash.nwSR}}">{{dash.nw}}</div>
+<div class="row" style="flex-wrap: wrap; gap: 8px; font-size: 14px">
+<sc-if value="{{dash.hasPrev}}"><span class="{{dash.chg.cls}}" style="font-weight: 600"><span aria-hidden="true">{{dash.chg.arrow}}</span> {{dash.chg.txt}}</span><span class="muted">vs last month</span></sc-if>
+</div>
+<svg class="spark" viewBox="0 0 300 72" preserveAspectRatio="none" role="img" aria-label="{{dash.sparkSR}}">
+<defs><linearGradient id="fw-sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gstop1"></stop><stop offset="1" class="gstop2"></stop></linearGradient></defs>
+<path class="ar" d="{{dash.sparkArea}}" fill="url(#fw-sg)"></path>
+<path class="ln" d="{{dash.sparkLine}}" vector-effect="non-scaling-stroke"></path>
+</svg>
+<div class="row muted" style="justify-content: space-between; font-size: 12px; margin-top: 4px"><span>{{dash.sparkFrom}}</span><span class="tag line">{{dash.sparkTag}}</span><span>{{dash.sparkTo}}</span></div>
+</div>
+</section>
+
+<div class="tiles">
+<sc-for list="{{dash.tiles}}" as="t" hint-placeholder-count="4">
+<div class="card tile">
+<div class="row" style="justify-content: space-between; gap: 4px"><span class="muted" style="font-size: 12.5px; font-weight: 600">{{t.label}}</span><button class="info" onClick="{{t.info}}" aria-label="{{t.infoAria}}" style="min-height: 28px; padding: 0 2px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg></button></div>
+<div class="val num" aria-label="{{t.sr}}">{{t.val}}</div>
+<div class="{{t.subCls}}"><span aria-hidden="true">{{t.arrow}}</span> {{t.sub}}</div>
+</div>
+</sc-for>
+</div>
+
+<section class="card" aria-labelledby="al-h">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px">
+<div class="row" style="gap: 6px"><h2 id="al-h">Allocation</h2><button class="info" onClick="{{dash.info.alloc}}" aria-label="How allocation is calculated"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg></button></div>
+<div class="seg" role="group" aria-label="Group allocation">
+<button class="{{dash.byTypeCls}}" onClick="{{dash.byType}}" aria-pressed="{{dash.isType}}">By type</button>
+<button class="{{dash.byCurCls}}" onClick="{{dash.byCur}}" aria-pressed="{{dash.isCur}}">By currency</button>
+</div>
+</div>
+<sc-if value="{{dash.allocChart}}" hint-placeholder-val="{{ true }}">
+<div class="donutwrap">
+<svg class="donut" viewBox="0 0 120 120" role="img" aria-label="{{dash.allocSR}}">
+<sc-for list="{{dash.alloc}}" as="a" hint-placeholder-count="6"><path d="{{a.d}}" stroke="{{a.color}}"></path></sc-for>
+<text x="60" y="57" class="axis" style="text-anchor: middle; fill: var(--muted); font-size: 9px; font-family: Inter, sans-serif">{{dash.allocCenterLabel}}</text>
+<text x="60" y="71" style="text-anchor: middle; fill: var(--text); font-size: 13px; font-weight: 600; font-family: Inter, sans-serif">{{dash.allocCenter}}</text>
+</svg>
+<div class="legend">
+<sc-for list="{{dash.alloc}}" as="a" hint-placeholder-count="6">
+<button class="{{a.cls}}" onClick="{{a.pick}}" aria-pressed="{{a.on}}"><span class="sw" style="background: {{a.color}}"></span><span style="flex: 1; min-width: 0">{{a.label}}</span><span class="muted num">{{a.pct}}</span><span class="num" style="width: 92px; text-align: right; font-weight: 600">{{a.val}}</span></button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{dash.allocTable}}" hint-placeholder-val="{{ false }}">
+<div class="tscroll"><table class="tbl"><thead><tr><th scope="col">Group</th><th scope="col" class="r">Value</th><th scope="col" class="r">Share</th></tr></thead><tbody>
+<sc-for list="{{dash.alloc}}" as="a" hint-placeholder-count="4"><tr><td>{{a.label}}</td><td class="r num">{{a.val}}</td><td class="r num">{{a.pct}}</td></tr></sc-for>
+</tbody></table></div>
+</sc-if>
+<div style="margin-top: 10px"><button class="btn ghost sm" onClick="{{dash.toggleAllocTable}}">{{dash.allocTableLabel}}</button></div>
+</section>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+<section class="card accent" aria-labelledby="fc-h">
+<div class="row" style="justify-content: space-between"><h2 id="fc-h" class="eyebrow"><span class="dot" aria-hidden="true"></span>FIRE progress</h2><button class="info" onClick="{{dash.info.prog}}" aria-label="How FIRE progress is calculated"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg></button></div>
+<p style="margin: 12px 0 4px; font-size: 15px">FIRE portfolio <strong class="num">{{dash.fireP}}</strong> — <strong class="num gain">{{dash.firePct}}</strong> of your FIRE number <span class="muted">(today's money, {{dash.fireNum}})</span></p>
+<div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{dash.fireBarN}}" aria-label="FIRE progress"><span style="width: {{dash.fireBar}}%"></span></div>
+<div class="row" style="justify-content: space-between; margin-top: 12px"><span class="hint">Target retirement age {{dash.fireTarget}}</span><button class="btn ghost sm" onClick="{{dash.goFire}}">Open FIRE plan<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevR}}"></path></svg></button></div>
+</section>
+
+<section class="card" aria-labelledby="nu-h">
+<div class="row" style="justify-content: space-between"><h2 id="nu-h">Needs updating</h2><span class="tag amber">{{dash.staleCount}}</span></div>
+<p class="hint" style="margin: 4px 0 6px">Holdings and FX rates not updated for {{dash.staleDays}}+ days.</p>
+<div class="list">
+<sc-for list="{{dash.stale}}" as="x" hint-placeholder-count="2">
+<div class="li">
+<div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{x.icon}}"></path></svg></div>
+<div style="flex: 1; min-width: 0"><div style="font-weight: 600">{{x.name}}</div><div class="metarow"><span class="tag amber">Stale — update</span><span>{{x.ago}}</span></div></div>
+<button class="btn sm" onClick="{{x.go}}">Update</button>
+</div>
+</sc-for>
+<sc-if value="{{dash.noStale}}" hint-placeholder-val="{{ false }}"><div class="li"><span class="tag cy">All up to date</span></div></sc-if>
+</div>
+</section>
+
+<section class="{{dash.backupCardCls}}" aria-labelledby="bk-h">
+<div class="row" style="gap: 12px; align-items: flex-start">
+<div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.shield}}"></path></svg></div>
+<div style="flex: 1; min-width: 0"><h2 id="bk-h">{{dash.backupTitle}}</h2><p class="hint" style="margin: 4px 0 12px">Your data lives only in this browser. A backup file is the only copy if this device is lost or browser data is cleared.</p>
+<button class="btn primary sm" onClick="{{doBackup}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.download}}"></path></svg>Download full backup</button></div>
+</div>
+</section>
+</div>
+</div>
+</sc-if>
+
+<!-- ================= HOLDINGS ================= -->
+<sc-if value="{{is.holdings}}" hint-placeholder-val="{{ false }}">
+<div class="card accent" style="display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: center">
+<div><div class="muted" style="font-size: 12.5px; font-weight: 600">Total value</div><div class="num serif" style="font-size: 28px">{{hold.total}}</div></div>
+<div><div class="muted" style="font-size: 12.5px; font-weight: 600">Invested</div><div class="num" style="font-size: 17px; font-weight: 600">{{hold.invested}}</div></div>
+<div><div class="muted" style="font-size: 12.5px; font-weight: 600">Gain / loss</div><div class="{{hold.gain.cls}}" style="font-size: 17px; font-weight: 600"><span aria-hidden="true">{{hold.gain.arrow}}</span> <span class="num">{{hold.gain.txt}}</span></div></div>
+<button class="info" onClick="{{hold.infoGain}}" style="margin-left: auto"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg>How is this calculated?</button>
+</div>
+
+<div class="row" style="flex-wrap: wrap; gap: 8px">
+<label class="sr" for="f-type">Filter by type</label>
+<select id="f-type" class="select chip" style="width: auto; min-height: 40px; font-weight: 600" value="{{hold.fType}}" onChange="{{hold.setType}}"><option value="all">Type: All</option><sc-for list="{{hold.typeOpts}}" as="o" hint-placeholder-count="3"><option value="{{o.v}}">{{o.l}}</option></sc-for></select>
+<label class="sr" for="f-cur">Filter by currency</label>
+<select id="f-cur" class="select chip" style="width: auto; min-height: 40px; font-weight: 600" value="{{hold.fCur}}" onChange="{{hold.setCur}}"><option value="all">Currency: All</option><sc-for list="{{hold.curOpts}}" as="o" hint-placeholder-count="3"><option value="{{o.v}}">{{o.l}}</option></sc-for></select>
+<label class="sr" for="f-fire">Filter by FIRE</label>
+<select id="f-fire" class="select chip" style="width: auto; min-height: 40px; font-weight: 600" value="{{hold.fFire}}" onChange="{{hold.setFire}}"><option value="all">FIRE: All</option><option value="yes">FIRE: Counts</option><option value="no">FIRE: Excluded</option></select>
+<span style="flex: 1"></span>
+<label class="sr" for="f-sort">Sort holdings</label>
+<select id="f-sort" class="select chip" style="width: auto; min-height: 40px; font-weight: 600" value="{{hold.sort}}" onChange="{{hold.setSort}}"><option value="value">Sort: Value</option><option value="gain">Sort: Gain %</option><option value="updated">Sort: Last updated</option></select>
+</div>
+<sc-if value="{{hold.filtered}}" hint-placeholder-val="{{ false }}"><div class="row" style="gap: 8px; flex-wrap: wrap"><span class="hint">{{hold.filterNote}}</span><button class="btn ghost sm" onClick="{{hold.clear}}">Clear filters</button></div></sc-if>
+
+<div class="row wide muted" style="display: grid; grid-template-columns: minmax(0,2.2fr) 1.1fr 1fr .8fr .7fr 1fr; gap: 12px; padding: 0 17px; font-size: 12px; font-weight: 600">
+<span>Holding</span><span class="r">Original value</span><span class="r">{{hold.baseCol}}</span><span class="r">Gain</span><span class="r">Share</span><span class="r">Updated</span>
+</div>
+
+<sc-for list="{{hold.groups}}" as="g" hint-placeholder-count="4">
+<section class="card hgroup">
+<button class="ghead" onClick="{{g.toggle}}" aria-expanded="{{g.open}}">
+<div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{g.icon}}"></path></svg></div>
+<div style="flex: 1; min-width: 0"><div style="font-weight: 600">{{g.label}}</div><div class="hint">{{g.count}}</div></div>
+<div style="text-align: right"><div class="num" style="font-weight: 600">{{g.total}}</div><div class="hint num">{{g.pct}} of portfolio</div></div>
+<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--muted)"><path d="{{g.chev}}"></path></svg>
+</button>
+<sc-if value="{{g.open}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{g.rows}}" as="h" hint-placeholder-count="2">
+<button class="hrow" onClick="{{h.open}}">
+<div style="min-width: 0">
+<div style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{h.name}}</div>
+<div class="metarow"><span>{{h.sub}}</span><span class="{{h.fireCls}}">{{h.fireTxt}}</span><sc-if value="{{h.hasTag}}" hint-placeholder-val="{{ false }}"><span class="tag line">{{h.tag}}</span></sc-if><sc-if value="{{h.stale}}" hint-placeholder-val="{{ false }}"><span class="tag amber">Stale — update</span></sc-if><span class="narrow">{{h.orig}}</span></div>
+</div>
+<div class="narrow r"><div class="num" style="font-weight: 600">{{h.val}}</div><div class="{{h.gcls}}" style="font-size: 13px; font-weight: 600"><span aria-hidden="true">{{h.arrow}}</span> <span class="num">{{h.gp}}</span></div></div>
+<div class="wide r num muted">{{h.orig}}</div>
+<div class="wide r num" style="font-weight: 600">{{h.val}}</div>
+<div class="wide r"><span class="{{h.gcls}}" style="font-weight: 600"><span aria-hidden="true">{{h.arrow}}</span> <span class="num">{{h.gp}}</span></span></div>
+<div class="wide r num muted">{{h.share}}</div>
+<div class="wide r muted" style="font-size: 13px">{{h.updated}}</div>
+</button>
+</sc-for>
+</sc-if>
+</section>
+</sc-for>
+<sc-if value="{{hold.none}}" hint-placeholder-val="{{ false }}"><div class="card empty"><p class="muted" style="margin: 0">No holdings match these filters.</p><button class="btn" onClick="{{hold.clear}}">Clear filters</button></div></sc-if>
+</sc-if>
+
+<!-- ================= HOLDING DETAIL ================= -->
+<sc-if value="{{is.holding}}" hint-placeholder-val="{{ false }}">
+<div><button class="btn ghost sm" onClick="{{hd.back}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevL}}"></path></svg>All holdings</button></div>
+<div class="cols">
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+<section class="card accent hero">
+<div class="orb" aria-hidden="true"></div>
+<div style="position: relative">
+<div class="row" style="gap: 12px"><div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{hd.icon}}"></path></svg></div><div style="flex: 1; min-width: 0"><div style="font-weight: 600; font-size: 17px">{{hd.name}}</div><div class="hint">{{hd.typeLine}}</div></div><sc-if value="{{hd.stale}}" hint-placeholder-val="{{ false }}"><span class="tag amber">Stale — update</span></sc-if></div>
+<div class="bignum serif num" style="font-size: 40px">{{hd.val}}</div>
+<div class="row" style="flex-wrap: wrap; gap: 10px; font-size: 14px"><span class="muted num">{{hd.orig}}</span><span class="{{hd.g.cls}}" style="font-weight: 600"><span aria-hidden="true">{{hd.g.arrow}}</span> {{hd.g.txt}}</span><button class="info" onClick="{{hd.info}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg>How is this calculated?</button></div>
+</div>
+</section>
+<section class="card">
+<div class="row" style="justify-content: space-between"><h2>Value history</h2><span class="tag line">{{hd.histNote}}</span></div>
+<svg class="spark" viewBox="0 0 300 72" preserveAspectRatio="none" role="img" aria-label="{{hd.sparkSR}}" style="height: 96px">
+<defs><linearGradient id="fw-hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gstop1"></stop><stop offset="1" class="gstop2"></stop></linearGradient></defs>
+<path class="ar" d="{{hd.area}}" fill="url(#fw-hg)"></path>
+<path class="ln" d="{{hd.line}}" vector-effect="non-scaling-stroke"></path>
+</svg>
+<div class="list" style="margin-top: 8px">
+<sc-for list="{{hd.hist}}" as="e" hint-placeholder-count="3"><div class="li" style="padding: 8px 0"><span style="flex: 1">{{e.date}}</span><span class="num" style="font-weight: 600">{{e.val}}</span></div></sc-for>
+</div>
+</section>
+</div>
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+<section class="card accent">
+<h2>Update value</h2>
+<p class="hint" style="margin: 4px 0 12px">Logs a dated entry in the history and refreshes all totals.</p>
+<div class="fgrid">
+<div class="field"><label for="uv-val">New current value ({{hd.cur}})</label><input id="uv-val" class="{{hd.uvCls}}" type="number" inputmode="decimal" min="0" value="{{hd.uvVal}}" onChange="{{hd.setUv}}"><sc-if value="{{hd.uvErr}}" hint-placeholder-val="{{ false }}"><span class="err">Enter a value of 0 or more.</span></sc-if></div>
+<div class="field"><label for="uv-date">Date</label><input id="uv-date" class="input" type="date" value="{{hd.uvDate}}" onChange="{{hd.setUvDate}}"></div>
+</div>
+<div class="row" style="margin-top: 14px; gap: 10px; flex-wrap: wrap"><button class="btn primary" onClick="{{hd.logUpdate}}">Log update</button><button class="btn" onClick="{{hd.edit}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.pencil}}"></path></svg>Edit all fields</button><button class="btn ghost danger" onClick="{{hd.del}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.trash}}"></path></svg>Delete</button></div>
+</section>
+<section class="card">
+<h2>Details</h2>
+<div class="list" style="margin-top: 6px">
+<sc-for list="{{hd.fields}}" as="f" hint-placeholder-count="6"><div class="li" style="padding: 10px 0"><span class="muted" style="flex: 1">{{f.k}}</span><span style="font-weight: 600; text-align: right">{{f.v}}</span></div></sc-for>
+</div>
+</section>
+</div>
+</div>
+</sc-if>
+
+<!-- ================= LIABILITIES ================= -->
+<sc-if value="{{is.liabilities}}" hint-placeholder-val="{{ false }}">
+<div class="tiles">
+<sc-for list="{{liab.tiles}}" as="t" hint-placeholder-count="3">
+<div class="card tile">
+<div class="row" style="justify-content: space-between"><span class="muted" style="font-size: 12.5px; font-weight: 600">{{t.label}}</span><button class="info" onClick="{{t.info}}" aria-label="{{t.infoAria}}" style="min-height: 28px; padding: 0 2px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg></button></div>
+<div class="val num">{{t.val}}</div>
+<div class="sub muted">{{t.sub}}</div>
+</div>
+</sc-for>
+</div>
+<section class="card" style="padding: 0; overflow: hidden">
+<sc-for list="{{liab.rows}}" as="l" hint-placeholder-count="3">
+<button class="hrow" onClick="{{l.open}}" style="grid-template-columns: minmax(0,1fr) auto; padding: 16px">
+<div style="min-width: 0; display: flex; gap: 12px; align-items: center">
+<div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{l.icon}}"></path></svg></div>
+<div style="flex: 1; min-width: 0">
+<div style="font-weight: 600">{{l.name}}</div>
+<div class="metarow"><span>{{l.type}}</span><span>· {{l.rate}}</span><span>· {{l.monthly}}</span></div>
+<sc-if value="{{l.hasBar}}" hint-placeholder-val="{{ true }}"><div style="margin-top: 8px; max-width: 360px"><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{l.paidN}}" aria-label="{{l.barAria}}"><span style="width: {{l.paid}}%"></span></div><div class="hint" style="margin-top: 4px">{{l.paidTxt}}</div></div></sc-if>
+<sc-if value="{{l.noBar}}" hint-placeholder-val="{{ false }}"><div class="hint" style="margin-top: 6px">{{l.noBarTxt}}</div></sc-if>
+</div>
+</div>
+<div class="r"><div class="num" style="font-weight: 600">{{l.val}}</div><div class="hint num">{{l.orig}}</div><div class="hint">{{l.payoff}}</div></div>
+</button>
+</sc-for>
+</section>
+<p class="foot">Payoff dates are estimates from balance, rate and monthly payment — your lender's schedule may differ.</p>
+</sc-if>
+
+<!-- ================= LIABILITY DETAIL ================= -->
+<sc-if value="{{is.liability}}" hint-placeholder-val="{{ false }}">
+<div><button class="btn ghost sm" onClick="{{ld.back}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevL}}"></path></svg>All liabilities</button></div>
+<div class="cols">
+<section class="card accent hero">
+<div class="orb" aria-hidden="true"></div>
+<div style="position: relative">
+<div class="row" style="gap: 12px"><div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ld.icon}}"></path></svg></div><div><div style="font-weight: 600; font-size: 17px">{{ld.name}}</div><div class="hint">{{ld.type}}</div></div></div>
+<div class="muted" style="font-size: 12.5px; font-weight: 600; margin-top: 18px">Outstanding balance</div>
+<div class="bignum serif num" style="font-size: 40px; margin-top: 4px">{{ld.val}}</div>
+<div class="muted num">{{ld.orig}}</div>
+<sc-if value="{{ld.hasBar}}" hint-placeholder-val="{{ true }}"><div style="margin-top: 16px"><div class="bar"><span style="width: {{ld.paid}}%"></span></div><div class="hint" style="margin-top: 6px">{{ld.paidTxt}}</div></div></sc-if>
+</div>
+</section>
+<section class="card">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 6px"><h2>Estimated payoff</h2><span class="tag amber">Estimate — your lender's schedule may differ</span></div>
+<div class="serif" style="font-size: 30px; margin: 14px 0 4px">{{ld.payoffDate}}</div>
+<div class="muted">{{ld.payoffSub}}</div>
+<div class="list" style="margin-top: 12px">
+<sc-for list="{{ld.fields}}" as="f" hint-placeholder-count="4"><div class="li" style="padding: 10px 0"><span class="muted" style="flex: 1">{{f.k}}</span><span class="num" style="font-weight: 600">{{f.v}}</span></div></sc-for>
+</div>
+<div class="row" style="gap: 10px; margin-top: 14px; flex-wrap: wrap"><button class="btn" onClick="{{ld.info}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg>How is this calculated?</button><button class="btn" onClick="{{ld.edit}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.pencil}}"></path></svg>Edit</button><button class="btn ghost danger" onClick="{{ld.del}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.trash}}"></path></svg>Delete</button></div>
+</section>
+</div>
+</sc-if>
+
+<!-- ================= FIRE ================= -->
+<sc-if value="{{is.fire}}" hint-placeholder-val="{{ false }}">
+<section class="card accent hero">
+<div class="orb" aria-hidden="true"></div>
+<div style="position: relative">
+<h2 class="eyebrow"><span class="dot" aria-hidden="true"></span>Your plan</h2>
+<div class="fgrid" style="grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); margin-top: 14px">
+<div class="field"><label for="fi-age">Current age</label><input id="fi-age" class="{{fire.ageCls}}" type="number" inputmode="numeric" min="16" max="90" value="{{fire.age}}" onChange="{{fire.setAge}}"></div>
+<div class="field"><label for="fi-tgt">Target retirement age</label><input id="fi-tgt" class="{{fire.tgtCls}}" type="number" inputmode="numeric" min="17" max="100" value="{{fire.target}}" onChange="{{fire.setTarget}}"></div>
+<div class="field"><label for="fi-exp">Monthly expenses ({{fire.base}}, today's money)</label><input id="fi-exp" class="{{fire.expCls}}" type="number" inputmode="decimal" min="0" value="{{fire.exp}}" onChange="{{fire.setExp}}"></div>
+</div>
+<sc-if value="{{fire.inErr}}" hint-placeholder-val="{{ false }}"><p class="err" style="margin: 10px 0 0">{{fire.inErrTxt}}</p></sc-if>
+</div>
+</section>
+
+<section class="card">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 8px"><h2>Assumptions</h2><button class="btn ghost sm" onClick="{{fire.goAsm}}">All assumptions<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevR}}"></path></svg></button></div>
+<div class="fgrid" style="grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); margin-top: 12px">
+<sc-for list="{{fire.asms}}" as="a" hint-placeholder-count="3">
+<div class="asmchip">
+<div class="row" style="justify-content: space-between"><label class="lbl" for="{{a.id}}">{{a.name}}</label><span class="tag asm">Assumption</span></div>
+<div class="asmin"><input id="{{a.id}}" class="input" type="number" inputmode="decimal" step="0.1" min="0" value="{{a.val}}" onChange="{{a.set}}"><span class="muted">{{a.unit}}</span><sc-if value="{{a.changed}}" hint-placeholder-val="{{ false }}"><button class="btn ghost sm" onClick="{{a.reset}}">Reset</button></sc-if></div>
+<div class="hint">{{a.note}}</div>
+</div>
+</sc-for>
+</div>
+<div class="formula" style="margin-top: 14px">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 6px"><span style="font-weight: 600">FIRE portfolio</span><button class="info" onClick="{{fire.info.fireP}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg>How is this calculated?</button></div>
+<div class="muted" style="margin-top: 4px">FIRE-counted assets − non-mortgage debts</div>
+<div class="eq">{{fire.fpEq}}</div>
+<button class="btn ghost sm" style="margin-top: 8px; padding-left: 0" onClick="{{fire.toggleWhich}}" aria-expanded="{{fire.whichOpen}}">{{fire.whichLabel}}</button>
+<sc-if value="{{fire.whichOpen}}" hint-placeholder-val="{{ false }}">
+<div class="list" style="margin-top: 4px">
+<sc-for list="{{fire.which}}" as="w" hint-placeholder-count="4"><button class="switch" role="switch" aria-checked="{{w.on}}" onClick="{{w.toggle}}" style="border-top: 1px solid var(--border)"><span><span>{{w.name}}</span> <span class="muted num" style="font-weight: 500">· {{w.val}}</span></span><span class="knob"></span></button></sc-for>
+</div>
+</sc-if>
+</div>
+</section>
+
+<div class="tiles cols3" style="grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr))">
+<sc-for list="{{fire.results}}" as="r" hint-placeholder-count="4">
+<section class="card accent">
+<div class="row" style="justify-content: space-between; gap: 6px"><span class="muted" style="font-size: 12.5px; font-weight: 600">{{r.label}}</span><button class="info" onClick="{{r.info}}" aria-label="{{r.infoAria}}" style="min-height: 28px; padding: 0 2px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg></button></div>
+<div class="serif num" style="font-size: 30px; margin: 8px 0 8px">{{r.val}}</div>
+<div class="formula" style="padding: 10px 12px; font-size: 13px"><div class="muted">{{r.plain}}</div><div class="eq" style="margin-top: 4px">{{r.eq}}</div></div>
+<sc-if value="{{r.hasBar}}" hint-placeholder-val="{{ false }}"><div class="bar" style="margin-top: 12px"><span style="width: {{r.bar}}%"></span></div></sc-if>
+<sc-if value="{{r.hasNote}}" hint-placeholder-val="{{ false }}"><div class="hint" style="margin-top: 8px">{{r.note}}</div></sc-if>
+</section>
+</sc-for>
+</div>
+
+<section class="card">
+<button class="ghead" style="padding: 0; min-height: 44px" onClick="{{fire.toggleCan}}" aria-expanded="{{fire.canOpen}}"><span style="flex: 1; font-weight: 600">What I can invest per month <span class="tag line" style="margin-left: 6px">Optional</span></span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{fire.canChev}}"></path></svg></button>
+<sc-if value="{{fire.canOpen}}" hint-placeholder-val="{{ false }}">
+<div class="fgrid" style="margin-top: 12px; align-items: end">
+<div class="field"><label for="fi-can">Monthly investment ({{fire.base}})</label><input id="fi-can" class="input big" type="number" inputmode="decimal" min="0" value="{{fire.can}}" onChange="{{fire.setCan}}"></div>
+<div><div class="muted" style="font-size: 12.5px; font-weight: 600">Estimated FIRE age</div><div class="serif num gain" style="font-size: 34px">{{fire.canAge}}</div></div>
+</div>
+<div class="formula" style="margin-top: 12px; font-size: 13px"><div class="muted">First age where portfolio (growing at {{fire.ret}}, plus this amount each month) ≥ FIRE number (rising with {{fire.infl}} inflation)</div><div class="row" style="justify-content: flex-end"><button class="info" onClick="{{fire.info.fireAge}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.info}}"></path></svg>Show the numbers</button></div></div>
+</sc-if>
+</section>
+
+<section class="card accent">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 10px"><div><h2>Projection</h2><div class="hint">{{fire.chartSub}}</div></div>
+<div class="seg" role="group" aria-label="Projection view"><button class="{{fire.chartCls}}" onClick="{{fire.showChart}}" aria-pressed="{{fire.isChart}}">Chart</button><button class="{{fire.tableCls}}" onClick="{{fire.showTable}}" aria-pressed="{{fire.isTable}}">Year by year</button></div></div>
+<sc-if value="{{fire.isChart}}" hint-placeholder-val="{{ true }}">
+<div class="row" style="gap: 18px; margin: 12px 0 4px; flex-wrap: wrap"><span class="legendline"><span class="ln-port"></span>Projected portfolio</span><span class="legendline"><span class="ln-tgt"></span>FIRE target (rising with inflation)</span></div>
+<svg class="chart" viewBox="0 0 640 270" role="img" aria-label="{{fire.chartSR}}">
+<defs><linearGradient id="fw-pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="gstop1"></stop><stop offset="1" class="gstop2"></stop></linearGradient></defs>
+<sc-for list="{{fire.yt}}" as="t" hint-placeholder-count="4"><line class="grid" x1="64" x2="628" y1="{{t.y}}" y2="{{t.y}}"></line><text class="axis end" x="56" y="{{t.ty}}">{{t.l}}</text></sc-for>
+<sc-for list="{{fire.xt}}" as="t" hint-placeholder-count="6"><text class="axis mid" x="{{t.x}}" y="262">{{t.l}}</text></sc-for>
+<path d="{{fire.area}}" fill="url(#fw-pg)"></path>
+<path class="tgt" d="{{fire.tgtPath}}"></path>
+<path class="port" d="{{fire.portPath}}"></path>
+<sc-if value="{{fire.hasCross}}" hint-placeholder-val="{{ true }}">
+<circle class="halo" cx="{{fire.cx}}" cy="{{fire.cy}}" r="14"></circle>
+<circle class="cross" cx="{{fire.cx}}" cy="{{fire.cy}}" r="6"></circle>
+<text class="clabel" x="{{fire.lx}}" y="{{fire.ly}}" style="text-anchor: {{fire.lanchor}}">{{fire.crossLabel}}</text>
+</sc-if>
+</svg>
+</sc-if>
+<sc-if value="{{fire.isTable}}" hint-placeholder-val="{{ false }}">
+<div class="tscroll" style="margin-top: 12px; max-height: 380px; overflow: auto"><table class="tbl"><thead><tr><th scope="col">Age</th><th scope="col" class="r">FIRE target</th><th scope="col" class="r">Projected portfolio</th><th scope="col" class="r">Status</th></tr></thead><tbody>
+<sc-for list="{{fire.rows}}" as="y" hint-placeholder-count="5"><tr><td class="num">{{y.age}}</td><td class="r num">{{y.tgt}}</td><td class="r num">{{y.port}}</td><td class="r"><span class="{{y.cls}}">{{y.status}}</span></td></tr></sc-for>
+</tbody></table></div>
+</sc-if>
+</section>
+<p class="foot">Estimates for planning only. Not financial advice. Returns and inflation are uncertain.</p>
+</sc-if>
+
+<!-- ================= ALL ASSUMPTIONS ================= -->
+<sc-if value="{{is.assumptions}}" hint-placeholder-val="{{ false }}">
+<div><button class="btn ghost sm" onClick="{{asm.back}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevL}}"></path></svg>{{asm.backLabel}}</button></div>
+<p class="muted" style="margin: 0">Every figure in FinWin that isn't something you typed comes from one of these. Change a value here and every screen updates.</p>
+<div class="tscroll"><table class="tbl" style="min-width: 720px"><thead><tr><th scope="col">Assumption</th><th scope="col">Value</th><th scope="col">Used in</th><th scope="col">Last edited</th><th scope="col"><span class="sr">Reset</span></th></tr></thead><tbody>
+<sc-for list="{{asm.rows}}" as="a" hint-placeholder-count="6">
+<tr>
+<td><div style="font-weight: 600">{{a.name}}</div><div class="row" style="gap: 6px; margin-top: 4px"><span class="{{a.tagCls}}">{{a.tag}}</span></div></td>
+<td><div class="asmin"><label class="sr" for="{{a.id}}">{{a.name}}</label><input id="{{a.id}}" class="input" type="number" inputmode="decimal" step="{{a.step}}" min="0" value="{{a.val}}" onChange="{{a.set}}" style="width: 110px"><span class="muted">{{a.unit}}</span></div></td>
+<td class="muted" style="max-width: 240px">{{a.used}}</td>
+<td class="muted" style="white-space: nowrap">{{a.edited}}</td>
+<td><button class="btn ghost sm" onClick="{{a.reset}}" disabled="{{a.isDefault}}">Reset to {{a.def}}</button></td>
+</tr>
+</sc-for>
+</tbody></table></div>
+</sc-if>
+
+<!-- ================= SETTINGS ================= -->
+<sc-if value="{{is.settings}}" hint-placeholder-val="{{ false }}">
+<div class="cols">
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+<section class="card accent">
+<h2>Preferences</h2>
+<div class="fgrid" style="margin-top: 14px; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr))">
+<div class="field"><label for="s-base">Base currency</label>
+<select id="s-base" class="select" value="{{set.base}}" onChange="{{set.setBase}}"><optgroup label="Popular"><sc-for list="{{set.popular}}" as="c" hint-placeholder-count="5"><option value="{{c.code}}">{{c.code}} — {{c.name}}</option></sc-for></optgroup><optgroup label="All currencies"><sc-for list="{{set.all}}" as="c" hint-placeholder-count="5"><option value="{{c.code}}">{{c.code}} — {{c.name}}</option></sc-for></optgroup></select>
+<sc-if value="{{set.baseErr}}" hint-placeholder-val="{{ false }}"><span class="err">{{set.baseErrTxt}}</span></sc-if></div>
+<div class="field"><label for="s-num">Number format</label><select id="s-num" class="select" value="{{set.numFmt}}" onChange="{{set.setNum}}"><option value="en">1,234,567.89</option><option value="eu">1.234.567,89</option><option value="in">12,34,567.89 (Indian lakh–crore)</option></select></div>
+<div class="field"><label for="s-date">Date format</label><select id="s-date" class="select" value="{{set.dateFmt}}" onChange="{{set.setDate}}"><option value="dmy">9 Nov 2026</option><option value="dd">09/11/2026</option><option value="mm">11/09/2026</option><option value="iso">2026-11-09</option></select></div>
+<div class="field"><span class="lbl" id="s-theme-l">Theme</span><div class="seg" role="group" aria-labelledby="s-theme-l"><sc-for list="{{set.themes}}" as="t" hint-placeholder-count="3"><button class="{{t.cls}}" onClick="{{t.pick}}" aria-pressed="{{t.on}}">{{t.l}}</button></sc-for></div></div>
+</div>
+</section>
+
+<section class="card">
+<div class="row" style="justify-content: space-between; flex-wrap: wrap; gap: 6px"><h2>FX rates</h2><span class="tag asm">You enter these</span></div>
+<p class="hint" style="margin: 4px 0 10px">You enter rates yourself. FinWin does not fetch live data.</p>
+<div class="tscroll"><table class="tbl"><thead><tr><th scope="col">Currency</th><th scope="col">Rate vs {{set.base}}</th><th scope="col">Last updated</th></tr></thead><tbody>
+<sc-for list="{{set.fx}}" as="f" hint-placeholder-count="2">
+<tr><td><div style="font-weight: 600">{{f.code}}</div><div class="hint">{{f.name}}</div></td><td><div class="asmin"><span class="muted num" style="white-space: nowrap">1 {{set.base}} =</span><label class="sr" for="{{f.id}}">Rate for {{f.code}}</label><input id="{{f.id}}" class="input" type="number" inputmode="decimal" step="0.0001" min="0" value="{{f.val}}" onChange="{{f.set}}" style="width: 110px"><span class="muted">{{f.code}}</span></div></td><td><div class="muted" style="white-space: nowrap">{{f.date}}</div><div class="row" style="gap: 6px; margin-top: 4px"><span class="tag line">{{f.tag}}</span><sc-if value="{{f.stale}}" hint-placeholder-val="{{ false }}"><span class="tag amber">Stale — update</span></sc-if></div></td></tr>
+</sc-for>
+</tbody></table></div>
+<sc-if value="{{set.noFx}}" hint-placeholder-val="{{ false }}"><p class="hint">No foreign currencies in use yet. Rates appear here when you add a holding in another currency.</p></sc-if>
+<div style="margin-top: 10px"><button class="btn ghost sm" onClick="{{set.goAsm}}">All assumptions<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevR}}"></path></svg></button></div>
+</section>
+
+<section class="card accent">
+<div class="row" style="gap: 12px; align-items: flex-start"><div class="tico"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.lock}}"></path></svg></div><div style="flex: 1"><h2>Your data</h2><p class="hint" style="margin: 4px 0 0">Stored only in this browser on this device. Clearing browser data or using private browsing will erase it.</p></div></div>
+<div class="tiles" style="margin-top: 14px; grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr))">
+<sc-for list="{{set.counts}}" as="c" hint-placeholder-count="4"><div style="padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px"><div class="num" style="font-size: 20px; font-weight: 600">{{c.n}}</div><div class="hint">{{c.l}}</div></div></sc-for>
+</div>
+<div class="row" style="margin-top: 14px; gap: 10px; flex-wrap: wrap"><button class="btn" onClick="{{set.persist}}" disabled="{{set.persisted}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.shield}}"></path></svg>Keep my data safe on this device</button><span class="{{set.persistCls}} wrap">{{set.persistTxt}}</span></div>
+</section>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+<section class="card accent">
+<h2>Download data</h2>
+<div class="list" style="margin-top: 6px">
+<div class="li" style="flex-wrap: wrap"><div style="flex: 1 1 200px"><div style="font-weight: 600">Full backup (JSON)</div><div class="hint">Complete data, used for restore · finwin-backup-{{set.todayIso}}.json</div></div><button class="btn primary sm" onClick="{{doBackup}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.download}}"></path></svg>Download full backup</button></div>
+<div class="li" style="flex-wrap: wrap"><div style="flex: 1 1 200px"><label class="lbl" for="s-csv">CSV for Excel / Google Sheets</label><select id="s-csv" class="select" style="margin-top: 6px" value="{{set.csv}}" onChange="{{set.setCsv}}"><option value="holdings">Holdings</option><option value="liabilities">Liabilities</option><option value="history">Value history</option></select></div><button class="btn sm" onClick="{{set.dlCsv}}" style="align-self: flex-end">Download CSV</button></div>
+</div>
+<p class="hint" style="margin: 10px 0 0; display: flex; gap: 6px; align-items: center"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.alert}}"></path></svg>Files are not password-protected. Store them somewhere safe.</p>
+</section>
+
+<section class="card">
+<h2>Restore from backup</h2>
+<p class="hint" style="margin: 4px 0 12px">Choose a FinWin JSON file. You'll see a preview before anything changes.</p>
+<button class="btn" onClick="{{set.restore}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.upload}}"></path></svg>Choose JSON file</button>
+</section>
+
+<section class="card">
+<div class="fgrid" style="align-items: end">
+<div class="field"><label for="s-rem">Backup reminder</label><select id="s-rem" class="select" value="{{set.reminder}}" onChange="{{set.setReminder}}"><option value="off">Off</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
+<div><div class="hint">Last backup</div><span class="{{set.lastCls}}" style="margin-top: 6px">{{set.lastTxt}}</span></div>
+</div>
+</section>
+
+
+<section class="card">
+<h2>About &amp; privacy</h2>
+<div class="list" style="margin-top: 6px; font-size: 14px">
+<div class="li"><span class="dot"></span>No accounts, no sign-up, no cloud.</div>
+<div class="li"><span class="dot"></span>No tracking of financial data. No analytics that see your numbers.</div>
+<div class="li"><span class="dot"></span>Works offline. Install it from your browser menu (Add to Home Screen).</div>
+</div>
+<p class="hint" style="margin: 10px 0 0">FinWin is a planning tool, not financial advice. All figures are estimates based on what you enter.</p>
+</section>
+
+<section class="card danger-zone">
+<h2 style="color: var(--loss)">Danger zone</h2>
+<p class="hint" style="margin: 4px 0 12px">Permanently erases every holding, liability, rate and setting from this browser. Download a backup first.</p>
+<button class="btn danger" onClick="{{set.erase}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.trash}}"></path></svg>Erase all data on this device</button>
+</section>
+</div>
+</div>
+</sc-if>
+
+</div>
+</main>
+<nav class="tabbar" aria-label="Main navigation">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="5">
+<button class="{{n.tabCls}}" onClick="{{n.go}}" aria-current="{{n.cur}}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{n.icon}}"></path></svg><span>{{n.short}}</span></button>
+</sc-for>
+</nav>
+</div>
+</div>
+<button class="fab" onClick="{{hdr.openQA}}" aria-label="Quick add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.plus}}"></path></svg></button>
+
+<!-- ================= SHEETS ================= -->
+<sc-if value="{{sheet.open}}" hint-placeholder-val="{{ false }}">
+<button class="scrim" onClick="{{sheet.close}}" aria-label="Close panel" tabindex="-1"></button>
+<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+<div class="grab" aria-hidden="true"></div>
+<div class="shead"><h2 id="sh-title" class="serif">{{sheet.title}}</h2><button class="iconbtn" onClick="{{sheet.close}}" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.close}}"></path></svg></button></div>
+
+<!-- calc / assumptions panel -->
+<sc-if value="{{sheet.isCalc}}" hint-placeholder-val="{{ false }}">
+<div class="sbody">
+<div class="formula"><div class="eyebrow" style="font-size: 11px">In plain English</div><div style="margin-top: 6px; font-size: 15px">{{calc.plain}}</div></div>
+<div class="formula"><div class="eyebrow" style="font-size: 11px">With your numbers</div><div class="eq" style="font-size: 15px; white-space: pre-line">{{calc.sub}}</div></div>
+<div><div class="eyebrow" style="font-size: 11px; margin-bottom: 4px">Inputs and where they came from</div>
+<div class="list"><sc-for list="{{calc.inputs}}" as="x" hint-placeholder-count="3"><div class="kv"><div class="row" style="justify-content: space-between; gap: 10px"><span style="font-weight: 600">{{x.k}}</span><span class="num" style="text-align: right">{{x.v}}</span></div><div class="hint">{{x.src}}</div></div></sc-for></div></div>
+<sc-if value="{{calc.hasNote}}" hint-placeholder-val="{{ false }}"><p class="hint" style="margin: 0">{{calc.note}}</p></sc-if>
+</div>
+<div class="sfoot"><button class="btn primary" onClick="{{calc.edit}}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.pencil}}"></path></svg>{{calc.editLabel}}</button></div>
+</sc-if>
+
+<!-- quick add / edit form -->
+<sc-if value="{{sheet.isForm}}" hint-placeholder-val="{{ false }}">
+<sc-if value="{{qa.showTabs}}" hint-placeholder-val="{{ true }}">
+<div style="padding: 0 20px 6px"><div class="seg" role="tablist" aria-label="Add method" style="width: 100%"><button role="tab" class="{{qa.tabTypeCls}}" aria-selected="{{qa.isType}}" onClick="{{qa.tabType}}" style="flex: 1">Type it</button><button role="tab" class="{{qa.tabShotCls}}" aria-selected="{{qa.isShot}}" onClick="{{qa.tabShot}}" style="flex: 1">Paste a screenshot <span class="tag cy" style="margin-left: 4px">Beta</span></button></div></div>
+</sc-if>
+
+<sc-if value="{{qa.showForm}}" hint-placeholder-val="{{ true }}">
+<div class="sbody">
+<sc-if value="{{qa.showKind}}" hint-placeholder-val="{{ true }}">
+<div class="seg" role="group" aria-label="Entry kind" style="width: 100%"><button class="{{qa.assetCls}}" onClick="{{qa.setAsset}}" aria-pressed="{{qa.isAsset}}" style="flex: 1">Asset</button><button class="{{qa.liabCls}}" onClick="{{qa.setLiab}}" aria-pressed="{{qa.isLiab}}" style="flex: 1">Liability</button></div>
+</sc-if>
+
+<sc-if value="{{qa.isAsset}}" hint-placeholder-val="{{ true }}">
+<div class="fgrid">
+<div class="field"><label for="q-type">Type</label><select id="q-type" class="select" value="{{qa.f.type}}" onChange="{{qa.setType}}"><sc-for list="{{qa.types}}" as="o" hint-placeholder-count="5"><option value="{{o.k}}">{{o.l}}</option></sc-for></select></div>
+<div class="field"><label for="q-sub">Sub-type</label><select id="q-sub" class="select" value="{{qa.f.sub}}" onChange="{{qa.setSub}}"><sc-for list="{{qa.subs}}" as="o" hint-placeholder-count="3"><option value="{{o}}">{{o}}</option></sc-for></select></div>
+<div class="field full"><span class="lbl" id="q-cur-l">Currency</span><button class="curbtn" onClick="{{qa.openPicker}}" aria-labelledby="q-cur-l"><span class="flag" aria-hidden="true">{{qa.curFlag}}</span><span style="flex: 1"><strong>{{qa.f.cur}}</strong> <span class="muted">— {{qa.curName}}</span></span><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevD}}"></path></svg></button></div>
+<sc-if value="{{qa.needRate}}" hint-placeholder-val="{{ false }}"><div class="field full"><label for="q-rate">FX rate: 1 {{qa.base}} = ? {{qa.f.cur}}</label><input id="q-rate" class="{{qa.rateCls}}" type="number" inputmode="decimal" min="0" step="0.0001" value="{{qa.f.fx}}" onChange="{{qa.setFx}}"><span class="hint">No rate for {{qa.f.cur}} yet. You enter it once; edit it later in Settings.</span><sc-if value="{{qa.e.fx}}" hint-placeholder-val="{{ false }}"><span class="err">Enter a rate above 0.</span></sc-if></div></sc-if>
+<div class="field full"><label for="q-name">Name</label><input id="q-name" class="{{qa.nameCls}}" type="text" autocomplete="off" placeholder="e.g. Savings account" value="{{qa.f.name}}" onChange="{{qa.setName}}"><sc-if value="{{qa.e.name}}" hint-placeholder-val="{{ false }}"><span class="err">Give this holding a name.</span></sc-if></div>
+<div class="field"><label for="q-inv">Amount invested</label><input id="q-inv" class="{{qa.invCls}}" type="number" inputmode="decimal" min="0" value="{{qa.f.invested}}" onChange="{{qa.setInv}}"><sc-if value="{{qa.e.invested}}" hint-placeholder-val="{{ false }}"><span class="err">{{qa.e.investedTxt}}</span></sc-if></div>
+<div class="field"><label for="q-cur">Current value</label><input id="q-cur" class="{{qa.curCls}}" type="number" inputmode="decimal" min="0" value="{{qa.f.current}}" onChange="{{qa.setCurV}}"><sc-if value="{{qa.e.current}}" hint-placeholder-val="{{ false }}"><span class="err">{{qa.e.currentTxt}}</span></sc-if></div>
+<sc-if value="{{qa.hasLive}}" hint-placeholder-val="{{ false }}"><div class="livegain full" aria-live="polite"><span class="muted">Gain / loss</span><span class="{{qa.live.cls}}" style="font-weight: 700"><span aria-hidden="true">{{qa.live.arrow}}</span> <span class="num">{{qa.live.txt}}</span></span></div></sc-if>
+<sc-if value="{{qa.full}}" hint-placeholder-val="{{ false }}">
+<div class="field"><label for="q-date">Date</label><input id="q-date" class="input" type="date" value="{{qa.f.date}}" onChange="{{qa.setDateF}}"></div>
+<div class="field" style="justify-content: flex-end"><button class="switch" role="switch" aria-checked="{{qa.f.fire}}" onClick="{{qa.toggleFire}}">Counts toward FIRE<span class="knob"></span></button></div>
+<div class="field full"><label for="q-notes">Notes (optional)</label><input id="q-notes" class="input" type="text" value="{{qa.f.notes}}" onChange="{{qa.setNotes}}"></div>
+</sc-if>
+<sc-if value="{{qa.compact}}" hint-placeholder-val="{{ true }}"><p class="hint full" style="margin: 0">{{qa.fireHint}}</p></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{qa.isLiab}}" hint-placeholder-val="{{ false }}">
+<div class="fgrid">
+<div class="field"><label for="q-ltype">Liability type</label><select id="q-ltype" class="select" value="{{qa.f.ltype}}" onChange="{{qa.setLtype}}"><sc-for list="{{qa.ltypes}}" as="o" hint-placeholder-count="5"><option value="{{o.k}}">{{o.l}}</option></sc-for></select></div>
+<div class="field"><span class="lbl" id="q-lcur-l">Currency</span><button class="curbtn" onClick="{{qa.openPicker}}" aria-labelledby="q-lcur-l"><span class="flag" aria-hidden="true">{{qa.curFlag}}</span><strong style="flex: 1">{{qa.f.cur}}</strong><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.chevD}}"></path></svg></button></div>
+<sc-if value="{{qa.needRate}}" hint-placeholder-val="{{ false }}"><div class="field full"><label for="q-lrate">FX rate: 1 {{qa.base}} = ? {{qa.f.cur}}</label><input id="q-lrate" class="{{qa.rateCls}}" type="number" inputmode="decimal" min="0" step="0.0001" value="{{qa.f.fx}}" onChange="{{qa.setFx}}"><sc-if value="{{qa.e.fx}}" hint-placeholder-val="{{ false }}"><span class="err">Enter a rate above 0.</span></sc-if></div></sc-if>
+<div class="field full"><label for="q-lname">Name</label><input id="q-lname" class="{{qa.nameCls}}" type="text" placeholder="e.g. Car loan" value="{{qa.f.name}}" onChange="{{qa.setName}}"><sc-if value="{{qa.e.name}}" hint-placeholder-val="{{ false }}"><span class="err">Give this liability a name.</span></sc-if></div>
+<div class="field full"><label for="q-bal">Outstanding balance</label><input id="q-bal" class="{{qa.balCls}}" type="number" inputmode="decimal" min="0" value="{{qa.f.balance}}" onChange="{{qa.setBal}}"><sc-if value="{{qa.e.balance}}" hint-placeholder-val="{{ false }}"><span class="err">{{qa.e.balanceTxt}}</span></sc-if></div>
+<sc-if value="{{qa.full}}" hint-placeholder-val="{{ false }}">
+<div class="field"><label for="q-lr">Interest rate % (optional)</label><input id="q-lr" class="{{qa.lrCls}}" type="number" inputmode="decimal" min="0" step="0.1" value="{{qa.f.rate}}" onChange="{{qa.setRate}}"><sc-if value="{{qa.e.rate}}" hint-placeholder-val="{{ false }}"><span class="err">Use 0–100.</span></sc-if></div>
+<div class="field"><label for="q-lm">Monthly payment (optional)</label><input id="q-lm" class="{{qa.lmCls}}" type="number" inputmode="decimal" min="0" value="{{qa.f.monthly}}" onChange="{{qa.setMonthly}}"><sc-if value="{{qa.e.monthly}}" hint-placeholder-val="{{ false }}"><span class="err">Can't be negative.</span></sc-if></div>
+<div class="field"><label for="q-lo">Original amount (optional)</label><input id="q-lo" class="input" type="number" inputmode="decimal" min="0" value="{{qa.f.original}}" onChange="{{qa.setOriginal}}"><span class="hint">Enables the payoff progress bar.</span></div>
+<div class="field"><label for="q-ld">Date</label><input id="q-ld" class="input" type="date" value="{{qa.f.date}}" onChange="{{qa.setDateF}}"></div>
+</sc-if>
+</div>
+</sc-if>
+</div>
+<div class="sfoot">
+<sc-if value="{{qa.canDelete}}"><button class="btn ghost danger" onClick="{{qa.del}}" style="margin-right: auto"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.trash}}"></path></svg>Delete</button></sc-if>
+<sc-if value="{{qa.canAnother}}" hint-placeholder-val="{{ true }}"><button class="btn" onClick="{{qa.saveAnother}}">Save &amp; add another</button></sc-if>
+<button class="btn primary" onClick="{{qa.save}}">{{qa.saveLabel}}</button>
+</div>
+</sc-if>
+
+<sc-if value="{{qa.showPicker}}" hint-placeholder-val="{{ false }}">
+<div class="sbody">
+<div class="field"><label for="q-search">Search currencies</label><div style="position: relative"><input id="q-search" class="input" type="search" placeholder="Code or name, e.g. AED or dirham" value="{{qa.search}}" onChange="{{qa.setSearch}}" style="padding-left: 40px"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true" style="position: absolute; left: 14px; top: 15px; color: var(--muted)"><path d="{{ic.search}}"></path></svg></div></div>
+<sc-if value="{{qa.showPopular}}" hint-placeholder-val="{{ true }}"><div class="eyebrow" style="font-size: 11px">Popular · most traded</div>
+<div class="list"><sc-for list="{{qa.popular}}" as="c" hint-placeholder-count="5"><button class="{{c.cls}}" onClick="{{c.pick}}"><span class="flag" aria-hidden="true">{{c.flag}}</span><span style="flex: 1"><strong>{{c.code}}</strong> <span class="muted">{{c.name}}</span></span><sc-if value="{{c.on}}" hint-placeholder-val="{{ false }}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--cyan)"><path d="{{ic.check}}"></path></svg></sc-if></button></sc-for></div></sc-if>
+<div class="eyebrow" style="font-size: 11px">All currencies</div>
+<div class="list"><sc-for list="{{qa.allCur}}" as="c" hint-placeholder-count="8"><button class="{{c.cls}}" onClick="{{c.pick}}"><span class="flag" aria-hidden="true">{{c.flag}}</span><span style="flex: 1"><strong>{{c.code}}</strong> <span class="muted">{{c.name}}</span></span><sc-if value="{{c.on}}" hint-placeholder-val="{{ false }}"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true" style="color: var(--cyan)"><path d="{{ic.check}}"></path></svg></sc-if></button></sc-for></div>
+<sc-if value="{{qa.noMatch}}" hint-placeholder-val="{{ false }}"><p class="hint">No currency matches “{{qa.search}}”.</p></sc-if>
+</div>
+<div class="sfoot"><button class="btn" onClick="{{qa.closePicker}}">Back to form</button></div>
+</sc-if>
+
+</sc-if>
+
+<!-- restore -->
+<sc-if value="{{sheet.isRestore}}" hint-placeholder-val="{{ false }}">
+<div class="sbody">
+<div class="formula"><div class="row" style="gap: 10px"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.upload}}"></path></svg><strong style="overflow-wrap: anywhere">{{rs.fileName}}</strong></div><div class="hint" style="margin-top: 4px">{{rs.madeTxt}}</div><div class="hint">{{rs.baseTxt}}</div></div>
+<div class="tiles" style="grid-template-columns: repeat(2, minmax(0,1fr))">
+<sc-for list="{{rs.counts}}" as="c"><div style="padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px"><div class="num" style="font-size: 20px; font-weight: 600">{{c.n}}</div><div class="hint">{{c.l}}</div></div></sc-for>
+</div>
+<div class="field"><span class="lbl" id="rs-l">How should we restore?</span><div class="seg" role="group" aria-labelledby="rs-l" style="width: 100%"><button class="{{rs.replaceCls}}" onClick="{{rs.setReplace}}" aria-pressed="{{rs.isReplace}}" style="flex: 1">Replace all</button><button class="{{rs.mergeCls}}" onClick="{{rs.setMerge}}" aria-pressed="{{rs.isMerge}}" style="flex: 1">Merge</button></div><span class="hint">{{rs.note}}</span></div>
+</div>
+<div class="sfoot"><button class="btn" onClick="{{sheet.close}}">Cancel</button><button class="btn primary" onClick="{{rs.confirm}}">{{rs.confirmLabel}}</button></div>
+</sc-if>
+
+<!-- delete one item -->
+<sc-if value="{{sheet.isDel}}">
+<div class="sbody"><p style="margin: 0">{{del.txt}}</p></div>
+<div class="sfoot"><button class="btn" onClick="{{sheet.close}}">Cancel</button><button class="btn danger fill" onClick="{{del.confirm}}">Delete</button></div>
+</sc-if>
+
+<!-- erase -->
+<sc-if value="{{sheet.isErase}}" hint-placeholder-val="{{ false }}">
+<div class="sbody">
+<p style="margin: 0">This permanently removes everything FinWin stores in this browser: {{er.summary}}. It can't be undone.</p>
+<div class="field"><label for="er-in">Type DELETE to confirm</label><input id="er-in" class="input" type="text" autocomplete="off" value="{{er.val}}" onChange="{{er.set}}"></div>
+</div>
+<div class="sfoot"><button class="btn" onClick="{{sheet.close}}">Cancel</button><button class="btn danger fill" onClick="{{er.confirm}}" disabled="{{er.disabled}}">Erase all data</button></div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{toast.show}}" hint-placeholder-val="{{ false }}">
+<div class="toast" role="status"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="{{ic.check}}"></path></svg>{{toast.text}}</div>
+</sc-if>
+</div>
+</script>
+<script src="vendor/morphdom.min.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+<script>
+  window.__finwin = FinWinEngine.mount(FinWinApp, document.getElementById('root'), document.getElementById('tpl').textContent, {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+</script>
+</body>
+</html>

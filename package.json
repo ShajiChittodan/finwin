@@ -1,0 +1,19 @@
+{
+  "name": "finwin",
+  "version": "1.0.0",
+  "description": "FinWin — private, manual finance tracker. Static web app; data stays in the browser (localStorage).",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "start": "python3 -m http.server 8080 --directory app",
+    "test": "node --test --test-concurrency=1 tests/*.test.js"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@fontsource/fraunces": "^5.1.0",
+    "@fontsource/inter": "^5.1.0",
+    "morphdom": "^2.7.4"
+  },
+  "private": true
+}
