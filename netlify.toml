@@ -1,0 +1,19 @@
+# Netlify settings for FinWin.
+# Plain static site: no build step. The whole site is the app/ folder.
+[build]
+  publish = "app"
+  command = ""
+
+# The service worker must never be cached, so app updates reach users on their next visit.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

@@ -27,7 +27,7 @@ Then open http://localhost:8080. Any static web server pointed at `app/` works.
 
 ## Deploy
 
-`app/` is the whole site: plain HTML, CSS and JavaScript with no build step. Upload that folder to any
+`app/` is the whole site: plain HTML, CSS and JavaScript with no build step. `netlify.toml` already sets this up for Netlify (publish directory `app`, no build command). Upload that folder to any
 static host, such as Netlify, Vercel, GitHub Pages or Cloudflare Pages. It must be served over HTTPS
 (or `localhost`) for offline mode and "Keep my data safe" to work.
 
